@@ -8,21 +8,27 @@ import numpy as np
 import pyflann
 
 
-def aroc(features, n_neighbors, threshold, num_proc=4):
+def aroc(features, n_neighbours, threshold, num_proc=4):
     """
     Calculates the pairwise distances between each face and merge all the faces
     with distances below a threshold.
+
+    Args:
+        features (list): Extracted features to be clustered
+        n_neighbours (int): Number of neighbours for KNN
+        threshold (float): Threshold
+        num_proc (int): Number of process to run simultaneously
     """
     # k-nearest neighbours using FLANN
     flann = pyflann.FLANN()
     params = flann.build_index(features, algorithm='kdtree', trees=4)
-    nearest_neighbors, distances = flann.nn_index(
-        features, n_neighbors, checks=params['checks'])
+    nearest_neighbours, distances = flann.nn_index(
+        features, n_neighbours, checks=params['checks'])
 
-    # Build lookup table for nearest neighbors
+    # Build lookup table for nearest neighbours
     neighbor_lookup = {}
-    for i in range(nearest_neighbors.shape[0]):
-        neighbor_lookup[i] = nearest_neighbors[i]
+    for i in range(nearest_neighbours.shape[0]):
+        neighbor_lookup[i] = nearest_neighbours[i]
 
     # Calculate pairwise distances
     pool = Pool(processes=num_proc)
@@ -34,7 +40,7 @@ def aroc(features, n_neighbors, threshold, num_proc=4):
         distances.append(val[0])
     distances = np.array(distances)
 
-    # Build lookup table for nearest neighbors filtered by threshold
+    # Build lookup table for nearest neighbours filtered by threshold
     for i, neighbor in neighbor_lookup.items():
         neighbor_lookup[i] = set(list(np.take(neighbor, np.where(
             distances[i] <= threshold)[0])))
@@ -50,14 +56,14 @@ def aroc(features, n_neighbors, threshold, num_proc=4):
 
         while queue:
             node = queue.pop(0)  # Get the first node to visit
-            neighbors = neighbor_lookup[node]  # Neighbors of the curent node
+            neighbours = neighbor_lookup[node]  # neighbours of the curent node
             # Elements common to nodes and visit
-            intersection = nodes.intersection(neighbors)
+            intersection = nodes.intersection(neighbours)
             # Intersection after removing elements found in group
             intersection.difference_update(group)
             # Nodes after removing elements found in intersection
             nodes.difference_update(intersection)
-            group.update(intersection)  # Add connected neighbors
+            group.update(intersection)  # Add connected neighbours
             queue.extend(intersection)  # Add to queue
 
         clusters.append(group)
@@ -68,34 +74,34 @@ def aroc(features, n_neighbors, threshold, num_proc=4):
 def _pairwise_distance(neighbor_lookup, row_no):
     """
     Calculates the distance based on directly summing the presence/absence
-    of shared nearest neighbors.
+    of shared nearest neighbours.
     """
     distance = np.zeros([1, len(neighbor_lookup[row_no])])
     row = neighbor_lookup[row_no]
 
-    # For all neighbor(s) as face B in face A's nearest neighbors
+    # For all neighbor(s) as face B in face A's nearest neighbours
     for i, neighbor in enumerate(row[1:]):
         oa_b = i + 1  # i-th face in the neighbor list of face A
 
         # Rank of face A in face B's neighbor list
         try:
-            neighbors_face_b = neighbor_lookup[neighbor]
-            ob_a = np.where(neighbors_face_b == row_no)[0][0] + 1
+            neighbours_face_b = neighbor_lookup[neighbor]
+            ob_a = np.where(neighbours_face_b == row_no)[0][0] + 1
         except IndexError:
             ob_a = len(neighbor_lookup[row_no]) + 1
+            distance[0, oa_b] = 9999
+            continue
 
-        # # of neighbor(s) that are not in face B's top k nearest neighbors
-        neighbors_face_a = set(row[:oa_b])
-        neighbors_face_b = set(neighbor_lookup[neighbor])
-        d_ab = len(neighbors_face_a.difference(neighbors_face_b))
+        # # of neighbor(s) that are not in face B's top k nearest neighbours
+        neighbours_face_a = set(row[:oa_b])
+        neighbours_face_b = set(neighbor_lookup[neighbor])
+        d_ab = len(neighbours_face_a.difference(neighbours_face_b))
 
-        # # of neighbor(s) that are not in face A's top k nearest neighbors
-        neighbors_face_a = set(neighbor_lookup[row_no])
-        neighbors_face_b = set(neighbor_lookup[neighbor][:ob_a])
-        d_ba = len(neighbors_face_b.difference(neighbors_face_a))
+        # # of neighbor(s) that are not in face A's top k nearest neighbours
+        neighbours_face_a = set(neighbor_lookup[row_no])
+        neighbours_face_b = set(neighbor_lookup[neighbor][:ob_a])
+        d_ba = len(neighbours_face_b.difference(neighbours_face_a))
 
-        distance[0, oa_b] = float(d_ab + d_ba) / min(oa_b, ob_a) \
-            if ob_a != len(neighbor_lookup[row_no]) + 1 \
-            else 9999
+        distance[0, oa_b] = float(d_ab + d_ba) / min(oa_b, ob_a)
 
     return distance
